@@ -62,7 +62,7 @@ To run this project, ensure the following are installed:
    docker compose up --build
    ```
 
-3. Open your browser and visit: [http://localhost:5173](http://localhost:5173)
+3. Open your browser and visit: [http://localhost:3000](http://localhost:3000)
 
 ---
 
@@ -88,7 +88,7 @@ To run this project, ensure the following are installed:
    python app.py
    ```
 
-   The backend will be available at: [http://localhost:8000](http://localhost:8000)
+   The backend will be available at: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 #### Frontend
 
@@ -110,7 +110,7 @@ To run this project, ensure the following are installed:
    npm run dev
    ```
 
-   The frontend will be available at: [http://localhost:5173](http://localhost:5173)
+   The frontend will be available at: [http://localhost:3000](http://localhost:3000)
 
 ---
 
