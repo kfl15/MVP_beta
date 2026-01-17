@@ -110,7 +110,7 @@ To run this project, ensure the following are installed:
    npm run dev
    ```
 
-   The frontend will be available at: [http://localhost:3000](http://localhost:3000)
+   The frontend will be available at: [http://localhost:5173](http://localhost:5173)
 
 ---
 
