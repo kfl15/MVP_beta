@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Chroma / vector store
+chroma_store/
+
+# Uploaded files
+data/uploads/
+
+# Node
+frontend/node_modules/
+
+# Ollama runtime + secrets
+docker/ollama/models/
+docker/ollama/id_ed25519
+docker/ollama/id_ed25519.pub
+
+# OS
+.DS_Store
+Thumbs.db
