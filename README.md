@@ -59,7 +59,7 @@ To run this project, ensure the following are installed:
 2. Build and start the containers:
 
    ```bash
-   docker compose up --build
+   docker compose up -d --build
    ```
 
 3. Open your browser and visit: [http://localhost:3000](http://localhost:3000)
@@ -111,6 +111,15 @@ To run this project, ensure the following are installed:
    ```
 
    The frontend will be available at: [http://localhost:5173](http://localhost:5173)
+
+---
+
+### Port Configuration
+
+If port `11434` is busy, either:
+
+- Stop the local Ollama instance, or
+- Change the port mapping in the `docker-compose.yml` file to `11435:11434`.
 
 ---
 
