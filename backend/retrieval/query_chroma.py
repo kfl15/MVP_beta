@@ -290,10 +290,13 @@ Answer using ONLY the provided context.
 If the answer is not in the context, say: "I don't know based on the provided documents."
 No introductions. No filler. Be precise.
 
-Output format:
-- Write the answer as bullet points.
-- Each bullet must be a complete, standalone point.
-- Keep it short (max 6 bullets).
+STRICT OUTPUT RULES:
+- Output MUST be ONLY bullet points.
+- DO NOT write any lead-in line like: "Here is what we found", "Based on the context", "Answer:", "Sure", etc.
+- Start the first character of the response with '-' (dash).
+- If the answer is not in the context, output EXACTLY one bullet:
+  - I don't know based on the provided documents.
+- Max 6 bullets. No extra text before or after bullets.
 
 Context:
 {context}
