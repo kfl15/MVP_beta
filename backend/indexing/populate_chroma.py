@@ -20,6 +20,8 @@ sys.path.insert(0, BACKEND_ROOT)
 
 from loaders.pdf_loader import extract_text_from_pdf
 from embeddings.ollama_embedding import get_embedding
+from loaders.txt_loader import extract_text_from_txt  
+from loaders.excel_loader import extract_text_from_excel  
 
 
 # ======================= CONFIG ==============================
@@ -29,6 +31,9 @@ COLLECTION_NAME = "rag_documents"
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
+
+
+SUPPORTED_EXTS = {".pdf", ".txt", ".xlsx", ".xls"}  
 # ============================================================
 
 
@@ -50,12 +55,30 @@ def reset_chroma():
         print("🧹 Chroma store reset.")
 
 
-def index_pdf(pdf_path: str, collection):
+
+def index_file(file_path: str, collection):  
     document_id = str(uuid.uuid4())
-    filename = os.path.basename(pdf_path)
+    filename = os.path.basename(file_path)
+    ext = os.path.splitext(filename.lower())[1]  
 
     print(f"📄 Indexing: {filename}")
-    text = extract_text_from_pdf(pdf_path)
+
+   
+    if ext == ".pdf":
+        text = extract_text_from_pdf(file_path)
+    elif ext == ".txt":
+        text = extract_text_from_txt(file_path)
+    elif ext in (".xlsx", ".xls"):
+        text = extract_text_from_excel(file_path)
+    else:
+        print(f"⏭️ Skipped unsupported file type: {filename}")
+        return
+
+    # Optional safety: skip empty text
+    if not text or not text.strip():  
+        print(f"⚠️ No text extracted from: {filename}")
+        return
+
     chunks = chunk_text(text)
 
     for idx, chunk in enumerate(chunks):
@@ -68,11 +91,16 @@ def index_pdf(pdf_path: str, collection):
             metadatas=[{
                 "document_id": document_id,
                 "filename": filename,
-                "chunk_id": idx
+                "chunk_id": idx,
+                "file_ext": ext,  #  (helps debugging/filtering)
             }]
         )
 
     print(f"✅ Indexed {len(chunks)} chunks | document_id={document_id}")
+
+def index_pdf(pdf_path: str, collection):
+    # simply call the new generic indexer
+    return index_file(pdf_path, collection)
 
 
 def main(reset: bool = False):
@@ -85,18 +113,19 @@ def main(reset: bool = False):
     client = PersistentClient(path=CHROMA_DIR)
     collection = client.get_or_create_collection(COLLECTION_NAME)
 
-    pdf_files = [
+    #  CHANGED: scan for multiple file types (was only PDFs)
+    files = [
         f for f in os.listdir(DATA_DIR)
-        if f.lower().endswith(".pdf")
-    ]
+        if os.path.splitext(f.lower())[1] in SUPPORTED_EXTS
+    ]  
 
-    if not pdf_files:
-        print("⚠️ No PDFs found in data/uploads")
+    if not files:  
+        print("⚠️ No supported files found in data/uploads (.pdf, .txt, .xlsx, .xls)")
         return
 
-    for pdf in pdf_files:
-        pdf_path = os.path.join(DATA_DIR, pdf)
-        index_pdf(pdf_path, collection)
+    for f in files:  
+        file_path = os.path.join(DATA_DIR, f)
+        index_file(file_path, collection)  
 
     print("🎯 Chroma population complete.")
 

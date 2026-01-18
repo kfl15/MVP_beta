@@ -16,7 +16,8 @@ PROJECT_ROOT = os.path.abspath(os.path.join(BACKEND_ROOT, ".."))
 sys.path.insert(0, BACKEND_ROOT)
 # ============================================================
 
-from indexing.populate_chroma import index_pdf
+# from indexing.populate_chroma import index_pdf
+from indexing.populate_chroma import index_file
 from retrieval.query_chroma import query_rag
 from deletion.delete_document import delete_document
 from chromadb import PersistentClient
@@ -25,6 +26,8 @@ from chromadb import PersistentClient
 DATA_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
 CHROMA_DIR = os.path.join(PROJECT_ROOT, "chroma_store")
 COLLECTION_NAME = "rag_documents"
+ALLOWED_EXTS = {".pdf", ".txt", ".xlsx", ".xls"}  # <<< ADDED
+
 # ============================================================
 
 app = FastAPI(title="Local RAG MVP")
@@ -82,17 +85,28 @@ def upload_files(files: List[UploadFile] = File(...)):
     collection = client.get_or_create_collection(COLLECTION_NAME)
 
     indexed = []
+    skipped = []  # <<< ADDED
 
     for file in files:
-        file_path = os.path.join(DATA_DIR, file.filename)
+        # <<< ADDED: basic filename hardening
+        safe_name = os.path.basename(file.filename)
+        ext = os.path.splitext(safe_name.lower())[1]
+
+        if ext not in ALLOWED_EXTS:  # <<< ADDED
+            skipped.append({"filename": safe_name, "reason": "unsupported_extension"})
+            continue
+
+        file_path = os.path.join(DATA_DIR, safe_name)
 
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        index_pdf(file_path, collection)
-        indexed.append(file.filename)
+        # <<< CHANGED: index based on extension (pdf/txt/excel)
+        index_file(file_path, collection)
+        indexed.append(safe_name)
 
-    return {"indexed_files": indexed}
+    return {"indexed_files": indexed, "skipped_files": skipped}  # <<< CHANGED
+
 
 
 @app.post("/chat")

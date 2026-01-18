@@ -4,3 +4,7 @@ chromadb
 pypdf
 requests
 python-multipart
+pandas
+openpyxl
+xlrd
+
