@@ -17,8 +17,6 @@ def get_ollama_base_url() -> str:
 
 
 def get_embedding_model() -> str:
-    # Recommended default Ollama embedding model
-    # You can change later in backend/config.py; keeping simple for Step 1.
     return os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 
 
@@ -60,13 +58,18 @@ def _post_json(url: str, payload: dict, timeout: int = 180) -> dict:
             f"Check OLLAMA_BASE_URL and that Ollama is running. Error: {e}"
         ) from e
 
+_ensured = set()
+
 def ensure_model(model: str):
+    if model in _ensured:
+        return
     base_url = get_ollama_base_url()
     requests.post(
         f"{base_url}/api/pull",
         json={"name": model},
         timeout=600,
     )
+    _ensured.add(model)
 
 
 def get_embedding(text: str, model: Optional[str] = None) -> List[float]:

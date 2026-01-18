@@ -3,13 +3,10 @@ import sys
 from typing import List, Dict, Any
 from chromadb import PersistentClient
 from embeddings.ollama_embedding import ensure_model
-import requests
-import os
 import time
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
 
 # ============================================================
 # FIX PYTHON IMPORT PATH
@@ -29,12 +26,16 @@ from embeddings.ollama_embedding import get_embedding, get_ollama_base_url
 CHROMA_DIR = os.path.join(PROJECT_ROOT, "chroma_store")
 COLLECTION_NAME = "rag_documents"
 
-TOP_K = 5
+TOP_K = int(os.getenv("RAG_TOP_K", "20"))
+
 LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "mistral:7b-instruct-q4_K_M")
+
+# >>> ADDED: limit how many distinct documents/files we show as sources (keep TOP_K high)
+CITATION_DOC_LIMIT = int(os.getenv("CITATION_DOC_LIMIT", "5"))  # default 5
 # ============================================================
 
 
-def build_context(docs: List[str], max_chars: int = 12000) -> str:
+def build_context(docs: List[str], max_chars: int = 30000) -> str:
     """
     Concatenate retrieved chunks into a single context window (simple MVP).
     """
@@ -49,6 +50,7 @@ def build_context(docs: List[str], max_chars: int = 12000) -> str:
         total += len(d)
     return "\n\n---\n\n".join(context)
 
+
 _session = requests.Session()
 _retry = Retry(
     total=int(os.getenv("OLLAMA_HTTP_RETRIES", "3")),
@@ -60,6 +62,7 @@ _retry = Retry(
 _adapter = HTTPAdapter(max_retries=_retry)
 _session.mount("http://", _adapter)
 _session.mount("https://", _adapter)
+
 
 def ollama_generate(prompt: str) -> str:
     base_url = get_ollama_base_url()
@@ -73,16 +76,16 @@ def ollama_generate(prompt: str) -> str:
         "options": {"temperature": 0.2},
     }
 
-    t0 = time.time()
     r = _session.post(url, json=payload, timeout=timeout)
     r.raise_for_status()
     data = r.json()
     return (data.get("response") or "").strip()
 
+
 def to_pointwise_answer(answer_text: str, citations: list) -> list:
     """
     Convert an LLM answer into pointwise JSON.
-    MVP rule: each point receives the same citation list (TOP_K retrieved chunks),
+    MVP rule: each point receives the same citation list,
     because we don't yet have deterministic per-point chunk attribution.
     """
     if not answer_text:
@@ -90,7 +93,6 @@ def to_pointwise_answer(answer_text: str, citations: list) -> list:
 
     lines = [ln.strip() for ln in answer_text.splitlines() if ln.strip()]
 
-    # If model returned a single paragraph, convert to one point
     if len(lines) == 1:
         return [{
             "point_id": 1,
@@ -101,7 +103,6 @@ def to_pointwise_answer(answer_text: str, citations: list) -> list:
     points = []
     point_id = 1
     for ln in lines:
-        # Clean common bullet prefixes
         cleaned = ln.lstrip("-•*").strip()
         if not cleaned:
             continue
@@ -113,7 +114,6 @@ def to_pointwise_answer(answer_text: str, citations: list) -> list:
         point_id += 1
 
     return points
-
 
 
 def query_rag(question: str) -> Dict[str, Any]:
@@ -137,46 +137,63 @@ def query_rag(question: str) -> Dict[str, Any]:
     docs = (results.get("documents") or [[]])[0]
     metas = (results.get("metadatas") or [[]])[0]
 
-    if not docs:
+    # >>> ADDED: we need distances to pick best chunks across distinct files
+    dists = (results.get("distances") or [[]])[0]
+
+    docs_nonempty = [d for d in docs if d and d.strip()]
+    if not docs_nonempty:
         return {"answer": [{
             "point_id": 1,
             "text": "No relevant context found.",
             "sources": []
         }]}
 
-    context = build_context(docs)
+    context = build_context(docs_nonempty)
 
-    # Build citations (filename + chunk info). Page not available yet in current loader.
-    citations = []
-    for m in metas:
+    # >>> CHANGED: citations limited to N distinct documents (instead of all TOP_K)
+    # Sort by distance (smaller = closer), then keep first CITATION_DOC_LIMIT unique document_ids
+    scored = []
+    for m, dist in zip(metas, dists):
         if not m:
             continue
+        scored.append((dist, m))
+
+    scored.sort(key=lambda x: x[0])
+
+    seen_docs = set()
+    citations = []
+    for dist, m in scored:
+        doc_id = m.get("document_id")
+        if not doc_id or doc_id in seen_docs:
+            continue
+        seen_docs.add(doc_id)
         citations.append({
             "filename": m.get("filename"),
-            "document_id": m.get("document_id"),
+            "document_id": doc_id,
             "chunk_id": m.get("chunk_id"),
         })
+        if len(citations) >= CITATION_DOC_LIMIT:
+            break
 
     prompt = f"""
-        You are a helpful assistant.
-        Answer using ONLY the provided context.
-        If the answer is not in the context, say: "I don't know based on the provided documents."
-        No introductions. No filler. Be precise.
+You are a helpful assistant.
+Answer using ONLY the provided context.
+If the answer is not in the context, say: "I don't know based on the provided documents."
+No introductions. No filler. Be precise.
 
-        Output format:
-        - Write the answer as bullet points.
-        - Each bullet must be a complete, standalone point.
-        - Keep it short (max 6 bullets).
+Output format:
+- Write the answer as bullet points.
+- Each bullet must be a complete, standalone point.
+- Keep it short (max 6 bullets).
 
-        Context:
-        {context}
+Context:
+{context}
 
-        Question:
-        {question}
+Question:
+{question}
 
-        Answer:
-        """.strip()
-
+Answer:
+""".strip()
 
     answer = ollama_generate(prompt)
 

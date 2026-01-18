@@ -114,27 +114,51 @@ def chat(body: ChatRequest):
     result = query_rag(body.question)
     return result
 
-
 @app.get("/documents")
 def list_documents():
     client = PersistentClient(path=CHROMA_DIR)
     collection = client.get_or_create_collection(COLLECTION_NAME)
 
     data = collection.get(include=["metadatas"])
-    metas = data.get("metadatas", [])
+    metas = data.get("metadatas", []) or []
 
     docs = {}
+    cleaned = set()  # avoid repeated deletes for the same document_id
+
     for m in metas:
         if not m:
             continue
+
         doc_id = m.get("document_id")
+        filename = m.get("filename")
+
+        if not doc_id:
+            continue
+
+        # Build expected path in uploads directory
+        safe_name = os.path.basename(filename or "")
+        file_path = os.path.join(DATA_DIR, safe_name)
+
+        # OPTION B (strong): if file missing -> remove vectors from Chroma
+        if not safe_name or not os.path.exists(file_path):
+            if doc_id not in cleaned:
+                try:
+                    collection.delete(where={"document_id": doc_id})
+                except Exception as e:
+                    # don't crash listing if delete fails
+                    print(f"[WARN] Could not auto-clean doc_id={doc_id}: {e}")
+                cleaned.add(doc_id)
+            continue
+
+        # keep only unique doc_id in response
         if doc_id not in docs:
             docs[doc_id] = {
                 "document_id": doc_id,
-                "filename": m.get("filename"),
+                "filename": safe_name,
             }
 
     return list(docs.values())
+
 
 
 @app.delete("/documents/{document_id}")

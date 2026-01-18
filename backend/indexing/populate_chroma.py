@@ -6,7 +6,7 @@ from typing import List
 from chromadb import PersistentClient
 
 # ============================================================
-# FIX PYTHON IMPORT PATH
+# PYTHON IMPORT PATH
 # ============================================================
 BACKEND_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..")
@@ -29,8 +29,8 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
 CHROMA_DIR = os.path.join(PROJECT_ROOT, "chroma_store")
 COLLECTION_NAME = "rag_documents"
 
-CHUNK_SIZE = 800
-CHUNK_OVERLAP = 100
+CHUNK_SIZE = 1000
+CHUNK_OVERLAP = 250
 
 
 SUPPORTED_EXTS = {".pdf", ".txt", ".xlsx", ".xls"}  

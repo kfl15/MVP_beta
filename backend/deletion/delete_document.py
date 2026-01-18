@@ -48,18 +48,23 @@ def delete_document(document_id: str):
         if m and m.get("filename"):
             filenames.add(m.get("filename"))
 
+    # Delete original files from uploads directory
     deleted_files = []
     for fname in filenames:
-        file_path = os.path.join(DATA_DIR, fname)
+        safe_name = os.path.basename(fname or "")
+        if not safe_name:
+            continue
+        file_path = os.path.join(DATA_DIR, safe_name)
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)
-                deleted_files.append(fname)
+                deleted_files.append(safe_name)
             except Exception as e:
                 raise HTTPException(
                     status_code=500,
-                    detail=f"Failed to delete file '{fname}': {e}"
+                    detail=f"Failed to delete file '{safe_name}': {e}"
                 )
+
 
     # Delete all vectors for this document
     collection.delete(where={"document_id": document_id})
