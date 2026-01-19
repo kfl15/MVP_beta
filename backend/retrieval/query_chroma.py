@@ -1,23 +1,16 @@
 import os
 import sys
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Tuple
 from chromadb import PersistentClient
-from embeddings.ollama_embedding import ensure_model
-import time
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-import re
 
 # ============================================================
 # FIX PYTHON IMPORT PATH
 # ============================================================
-BACKEND_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..")
-)
-PROJECT_ROOT = os.path.abspath(
-    os.path.join(BACKEND_ROOT, "..")
-)
+BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(BACKEND_ROOT, ".."))
 sys.path.insert(0, BACKEND_ROOT)
 # ============================================================
 
@@ -27,32 +20,18 @@ from embeddings.ollama_embedding import get_embedding, get_ollama_base_url
 CHROMA_DIR = os.path.join(PROJECT_ROOT, "chroma_store")
 COLLECTION_NAME = "rag_documents"
 
-TOP_K = int(os.getenv("RAG_TOP_K", "20"))
+QUERY_TOP_K = int(os.getenv("RAG_QUERY_TOP_K", "12"))
+MAX_CONTEXT_CHUNKS = int(os.getenv("RAG_MAX_CHUNKS", "4"))
+MAX_CONTEXT_CHARS = int(os.getenv("RAG_MAX_CONTEXT_CHARS", "18000"))
+
+MAX_SOURCES = int(os.getenv("RAG_MAX_SOURCES", "10"))
+
+INCLUDE_RAW_CHUNKS = os.getenv("RAG_INCLUDE_RAW_CHUNKS", "0").lower() in ("1", "true", "yes")
+
 LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "mistral:7b-instruct-q4_K_M")
 
-# >>> ADDED: limit how many distinct documents/files we show as sources (keep TOP_K high)
-CITATION_DOC_LIMIT = int(os.getenv("CITATION_DOC_LIMIT", "5"))  # default 5
-
-# >>> ADDED: how many top chunks to scan when extracting the "exact line"
-EVIDENCE_SCAN_CHUNKS = int(os.getenv("EVIDENCE_SCAN_CHUNKS", "6"))
-EVIDENCE_MAX_CHARS = int(os.getenv("EVIDENCE_MAX_CHARS", "400"))
+UNKNOWN_ANSWER = "I don't know based on the provided documents."
 # ============================================================
-
-
-def build_context(docs: List[str], max_chars: int = 30000) -> str:
-    """
-    Concatenate retrieved chunks into a single context window (simple MVP).
-    """
-    context = []
-    total = 0
-    for d in docs:
-        if not d:
-            continue
-        if total + len(d) > max_chars:
-            break
-        context.append(d)
-        total += len(d)
-    return "\n\n---\n\n".join(context)
 
 
 _session = requests.Session()
@@ -77,7 +56,9 @@ def ollama_generate(prompt: str) -> str:
         "model": LLM_MODEL,
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": 0.2},
+        "options": {
+            "temperature": float(os.getenv("RAG_TEMPERATURE", "0.2")),
+        },
     }
 
     r = _session.post(url, json=payload, timeout=timeout)
@@ -86,217 +67,140 @@ def ollama_generate(prompt: str) -> str:
     return (data.get("response") or "").strip()
 
 
-# >>> ADDED: simple keyword extraction + line scoring to pick an "exact line"
-_STOPWORDS = {
-    "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "with", "by", "as",
-    "is", "are", "was", "were", "be", "been", "it", "this", "that", "these", "those",
-    "i", "you", "we", "they", "he", "she", "them", "his", "her", "our", "your",
-    "from", "at", "into", "than", "then", "but", "not", "no", "yes"
-}
+def _dedup_key(meta: dict) -> Tuple[str, str]:
+    doc_id = str(meta.get("document_id") or "")
+    page = meta.get("page") or meta.get("page_number")
+    if page is not None:
+        return (doc_id, f"page:{page}")
 
-def _question_tokens(question: str) -> List[str]:
-    toks = re.findall(r"[a-zA-Z0-9]+", (question or "").lower())
-    toks = [t for t in toks if len(t) >= 3 and t not in _STOPWORDS]
-    return toks[:25]  # cap to keep scoring stable
+    sheet = meta.get("sheet_name") or meta.get("sheet")
+    if sheet:
+        return (doc_id, f"sheet:{sheet}")
+
+    chunk_id = meta.get("chunk_id")
+    return (doc_id, f"chunk:{chunk_id}")
 
 
-def extract_best_line(
-    question: str,
+def _select_deduped_top_chunks(
     docs: List[str],
     metas: List[dict],
     dists: List[float],
-    scan_chunks: int = EVIDENCE_SCAN_CHUNKS,
-    max_chars: int = EVIDENCE_MAX_CHARS,
-) -> Tuple[Optional[str], Optional[dict]]:
-    """
-    Pick the single best supporting *line* from the retrieved chunks.
-    Deterministic heuristic (no LLM):
-      - sort chunks by distance (best first)
-      - scan first N chunks
-      - split chunk into lines
-      - score each line by keyword overlap with question tokens
-      - return best line + its source (filename/document_id/chunk_id/distance)
-    """
-    if not docs or not metas or not dists:
-        return None, None
-
-    qtoks = _question_tokens(question)
-
-    # Pair up, keep only non-empty docs
+    max_chunks: int,
+) -> List[Dict[str, Any]]:
     triples = []
-    for doc, m, dist in zip(docs, metas, dists):
+    for doc, m, dist in zip(docs or [], metas or [], dists or []):
         if not doc or not doc.strip() or not m:
             continue
-        triples.append((dist, doc, m))
+        triples.append({"doc": doc, "meta": m, "dist": float(dist)})
 
     if not triples:
-        return None, None
+        return []
 
-    triples.sort(key=lambda x: x[0])  # smaller distance = closer
-    triples = triples[: max(1, scan_chunks)]
+    triples.sort(key=lambda x: x["dist"])
 
-    best = None  # (score, dist, line, meta)
-    for dist, doc, m in triples:
-        lines = [ln.strip() for ln in doc.splitlines() if ln.strip()]
-        if not lines:
+    seen = set()
+    deduped = []
+    for t in triples:
+        key = _dedup_key(t["meta"])
+        if key in seen:
             continue
+        seen.add(key)
+        deduped.append(t)
+        if len(deduped) >= max_chunks:
+            break
 
-        for ln in lines:
-            ln_l = ln.lower()
-            if qtoks:
-                score = sum(1 for t in qtoks if t in ln_l)
-            else:
-                # if question tokenization yields nothing, fallback to first good line of top chunk
-                score = 0
+    return deduped
 
-            cand = (score, -dist, ln, m, dist)
-            if best is None or cand > best:
-                best = cand
 
-    if best is None:
-        # fallback: first line from best chunk
-        dist, doc, m = triples[0]
-        first_line = next((ln.strip() for ln in doc.splitlines() if ln.strip()), None)
-        if not first_line:
-            return None, None
-        return first_line[:max_chars], {
+def _build_context(selected: List[Dict[str, Any]], max_chars: int) -> str:
+    parts = []
+    total = 0
+    for i, t in enumerate(selected, start=1):
+        doc = (t.get("doc") or "").strip()
+        if not doc:
+            continue
+        if total + len(doc) > max_chars:
+            break
+        parts.append(f"[CHUNK {i}]\n{doc}")
+        total += len(doc)
+    return "\n\n---\n\n".join(parts)
+
+
+def _unique_sources(selected: List[Dict[str, Any]]) -> List[str]:
+    seen = set()
+    out = []
+    for t in selected:
+        m = t.get("meta") or {}
+        fn = (m.get("filename") or "").strip()
+        if not fn:
+            continue
+        if fn in seen:
+            continue
+        seen.add(fn)
+        out.append(fn)
+        if len(out) >= MAX_SOURCES:
+            break
+    return out
+
+
+def _raw_chunks_payload(selected: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    chunks = []
+    for t in selected:
+        m = t.get("meta") or {}
+        chunks.append({
+            "text": (t.get("doc") or "").strip(),
+            "distance": t.get("dist"),
             "filename": m.get("filename"),
             "document_id": m.get("document_id"),
             "chunk_id": m.get("chunk_id"),
-            "distance": dist,
-        }
-
-    _, _, line, m, dist = best
-    line = line.strip()
-    if len(line) > max_chars:
-        line = line[:max_chars].rstrip() + "..."
-    return line, {
-        "filename": m.get("filename"),
-        "document_id": m.get("document_id"),
-        "chunk_id": m.get("chunk_id"),
-        "distance": dist,
-    }
-
-
-def to_pointwise_answer(answer_text: str, citations: list, evidence_line: Optional[str], evidence_source: Optional[dict]) -> list:
-    """
-    Convert an LLM answer into pointwise JSON.
-
-    MVP rule: each point receives the same citation list (we don't have per-point attribution yet).
-
-    >>> CHANGED: also attach the same evidence_line + evidence_source to each point,
-    so UI can render: Answer -> Exact line -> Sources.
-    """
-    if not answer_text:
-        return []
-
-    lines = [ln.strip() for ln in answer_text.splitlines() if ln.strip()]
-
-    def _mk_point(pid: int, txt: str) -> dict:
-        return {
-            "point_id": pid,
-            "text": txt,
-            "evidence_line": evidence_line or "",
-            "evidence_source": evidence_source or {},
-            "sources": citations or [],
-        }
-
-    if len(lines) == 1:
-        return [_mk_point(1, lines[0])]
-
-    points = []
-    point_id = 1
-    for ln in lines:
-        cleaned = ln.lstrip("-•*").strip()
-        if not cleaned:
-            continue
-        points.append(_mk_point(point_id, cleaned))
-        point_id += 1
-
-    return points
+            "page": m.get("page") or m.get("page_number"),
+            "sheet_name": m.get("sheet_name") or m.get("sheet"),
+        })
+    return chunks
 
 
 def query_rag(question: str) -> Dict[str, Any]:
-    """
-    1) Embed question
-    2) Query Chroma
-    3) Build context
-    4) Ask Ollama to answer strictly from context
-    5) Return answer + citations + exact supporting line
-    """
     client = PersistentClient(path=CHROMA_DIR)
     collection = client.get_or_create_collection(COLLECTION_NAME)
 
     q_emb = get_embedding(question)
+
     results = collection.query(
         query_embeddings=[q_emb],
-        n_results=TOP_K,
-        include=["documents", "metadatas", "distances"]
+        n_results=QUERY_TOP_K,
+        include=["documents", "metadatas", "distances"],
     )
 
     docs = (results.get("documents") or [[]])[0]
     metas = (results.get("metadatas") or [[]])[0]
-    dists = (results.get("distances") or [[]])[0]  # keep aligned with docs/metas
+    dists = (results.get("distances") or [[]])[0]
 
-    docs_nonempty = [d for d in docs if d and d.strip()]
-    if not docs_nonempty:
-        return {"answer": [{
-            "point_id": 1,
-            "text": "No relevant context found.",
-            "evidence_line": "",
-            "evidence_source": {},
-            "sources": []
-        }]}
+    selected = _select_deduped_top_chunks(docs, metas, dists, MAX_CONTEXT_CHUNKS)
+    if not selected:
+        return {
+            "answer": UNKNOWN_ANSWER,
+            "sources": [],
+            **({"raw_chunks": []} if INCLUDE_RAW_CHUNKS else {}),
+        }
 
-    context = build_context(docs_nonempty)
-
-    # >>> ADDED: extract the "exact line" deterministically from retrieved chunks
-    evidence_line, evidence_source = extract_best_line(
-        question=question,
-        docs=docs,
-        metas=metas,
-        dists=dists,
-        scan_chunks=EVIDENCE_SCAN_CHUNKS,
-        max_chars=EVIDENCE_MAX_CHARS,
-    )
-
-    # Citations limited to N distinct docs (as you already implemented)
-    scored = []
-    for m, dist in zip(metas, dists):
-        if not m:
-            continue
-        scored.append((dist, m))
-
-    scored.sort(key=lambda x: x[0])
-
-    seen_docs = set()
-    citations = []
-    for dist, m in scored:
-        doc_id = m.get("document_id")
-        if not doc_id or doc_id in seen_docs:
-            continue
-        seen_docs.add(doc_id)
-        citations.append({
-            "filename": m.get("filename"),
-            "document_id": doc_id,
-            "chunk_id": m.get("chunk_id"),
-        })
-        if len(citations) >= CITATION_DOC_LIMIT:
-            break
+    context = _build_context(selected, MAX_CONTEXT_CHARS)
 
     prompt = f"""
-You are a helpful assistant.
+You are a private-business assistant for firms (e.g., accounting/bookkeeping).
 Answer using ONLY the provided context.
-If the answer is not in the context, say: "I don't know based on the provided documents."
-No introductions. No filler. Be precise.
 
-STRICT OUTPUT RULES:
-- Output MUST be ONLY bullet points.
-- DO NOT write any lead-in line like: "Here is what we found", "Based on the context", "Answer:", "Sure", etc.
-- Start the first character of the response with '-' (dash).
-- If the answer is not in the context, output EXACTLY one bullet:
-  - I don't know based on the provided documents.
-- Max 6 bullets. No extra text before or after bullets.
+CRITICAL RULES:
+- Produce ONE final answer (single coherent response).
+- Synthesize and summarize; DO NOT repeat or quote large chunks verbatim.
+- DO NOT mention filenames, sources, or "chunks" in the answer.
+- DO NOT add headings like "Answer:".
+- If the answer is not explicitly supported by the context, reply EXACTLY:
+{UNKNOWN_ANSWER}
+
+STYLE:
+- Clear, concise, professional.
+- 3-6 sentences maximum unless the user asks for more detail.
+- Avoid redundancy.
 
 Context:
 {context}
@@ -304,14 +208,25 @@ Context:
 Question:
 {question}
 
-Answer:
+Final Answer:
 """.strip()
 
-    answer = ollama_generate(prompt)
+    answer = ollama_generate(prompt).strip()
+    if not answer:
+        answer = UNKNOWN_ANSWER
 
-    # >>> CHANGED: attach evidence_line + evidence_source to each point
-    points = to_pointwise_answer(answer, citations, evidence_line, evidence_source)
-    return {"answer": points}
+    # ✅ KEY FIX: if answer is "I don't know", then NO SOURCES
+    is_unknown = answer.strip() == UNKNOWN_ANSWER
+
+    resp = {
+        "answer": answer,
+        "sources": [] if is_unknown else _unique_sources(selected),
+    }
+
+    if INCLUDE_RAW_CHUNKS:
+        resp["raw_chunks"] = [] if is_unknown else _raw_chunks_payload(selected)
+
+    return resp
 
 
 if __name__ == "__main__":
@@ -321,8 +236,7 @@ if __name__ == "__main__":
             break
 
         out = query_rag(q)
-        print("\nANSWER:\n", out["answer"])
-        print("\nSOURCES:")
-        for p in out["answer"]:
-            for s in p.get("sources", []):
-                print("-", s)
+        print("\nANSWER:\n", out.get("answer"))
+        print("\nSOURCES:\n", out.get("sources"))
+        if "raw_chunks" in out:
+            print("\nRAW_CHUNKS:\n", len(out["raw_chunks"]))

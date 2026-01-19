@@ -1,5 +1,10 @@
 import React, { useState } from "react";
 
+const ALLOWED_USERS = {
+  "admin1@gmail.com": "admin1@12",
+  "admin2@gmail.com": "admin2@12",
+};
+
 export default function LoginPage({ onSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -9,13 +14,26 @@ export default function LoginPage({ onSuccess }) {
     e.preventDefault();
     setErr("");
 
-    // UI-only login for now (no backend changes).
-    if (email.trim().length < 3 || password.trim().length < 3) {
-      setErr("Enter a valid email and password.");
+    const eNorm = email.trim().toLowerCase();
+    const pNorm = password.trim();
+
+    if (!eNorm || !pNorm) {
+      setErr("Enter email and password.");
       return;
     }
 
-    onSuccess({ email });
+    const expectedPassword = ALLOWED_USERS[eNorm];
+    if (!expectedPassword) {
+      setErr("Invalid email.");
+      return;
+    }
+
+    if (pNorm !== expectedPassword) {
+      setErr("Invalid password.");
+      return;
+    }
+
+    onSuccess({ email: eNorm });
   };
 
   return (
@@ -29,7 +47,7 @@ export default function LoginPage({ onSuccess }) {
             style={styles.input}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@company.com"
+            placeholder="password@gmail.com"
             autoComplete="username"
           />
 
@@ -50,9 +68,7 @@ export default function LoginPage({ onSuccess }) {
           </button>
         </form>
 
-        <div style={styles.hint}>
-          (UI-only login for now. We can connect real auth later.)
-        </div>
+        <div style={styles.hint}>(UI-only login with fixed accounts.)</div>
       </div>
     </div>
   );

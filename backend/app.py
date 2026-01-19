@@ -37,16 +37,29 @@ app = FastAPI(title="Local RAG MVP")
 def ensure_ollama_models():
     ollama_url = "http://ollama:11434"
 
-    models = [
-        "nomic-embed-text",
-        "mistral:7b-instruct-q4_K_M",
-    ]
+    # get current runtime model (from docker-compose env)
+    llm_model = os.getenv("OLLAMA_LLM_MODEL", "gemma2:2b")
+    embed_model = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+
+    models = [embed_model, llm_model]
 
     # Give Ollama a moment to start
     time.sleep(3)
 
+    try:
+        tags = requests.get(f"{ollama_url}/api/tags", timeout=60).json()
+        installed = set(m.get("name") for m in (tags.get("models") or []) if m.get("name"))
+    except Exception as e:
+        print(f"[WARN] Could not list Ollama tags: {e}")
+        installed = set()
+
     for model in models:
+        if model in installed:
+            print(f"[INFO] Ollama model already present: {model}")
+            continue
+
         try:
+            print(f"[INFO] Pulling Ollama model (missing): {model}")
             requests.post(
                 f"{ollama_url}/api/pull",
                 json={"name": model},
