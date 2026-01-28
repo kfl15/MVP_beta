@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { THEME } from "./theme";
 
 const API_BASE = "http://127.0.0.1:8000";
 
 function normalizeAnswerToText(answer) {
-  // New backend: answer is a string
   if (typeof answer === "string") return answer;
 
-  // Old backend: answer is an array of { point_id, text, sources }
   if (Array.isArray(answer)) {
     return answer
       .map((p) => {
@@ -32,7 +31,6 @@ function extractSourcesFromOldAnswer(answer) {
       if (s?.filename) filenames.push(s.filename);
     }
   }
-  // dedupe (keep order reinforcing first occurrence)
   return Array.from(new Set(filenames));
 }
 
@@ -77,10 +75,10 @@ function App() {
   }
 
   async function askQuestion() {
-    if (!question.trim() || asking) return;
-
-    const q = question.trim();
+    const q = question.trim(); // Ensure q is captured before setQuestion("")
     setQuestion("");
+    if (!q || asking) return;
+
     setAsking(true);
 
     const res = await fetch(`${API_BASE}/chat`, {
@@ -90,10 +88,11 @@ function App() {
     });
 
     const data = await res.json();
+    const matches = Array.isArray(data?.matches) ? data.matches : [];
 
-    // NEW shape: { answer: string, sources: [filename, ...] }
-    // OLD shape: { answer: [{point_id, text, sources:[{filename, document_id}, ...]}, ...] }
     const answerText = normalizeAnswerToText(data?.answer);
+    const summaryText =
+      typeof data?.summary === "string" ? data.summary.trim() : "";
     const sources =
       Array.isArray(data?.sources) && data.sources.every((x) => typeof x === "string")
         ? Array.from(new Set(data.sources))
@@ -102,11 +101,12 @@ function App() {
     setChat((prev) => [
       ...prev,
       {
-        question: q,
-        answerText,
-        sources,
-        // keep old raw answer if ever needed for debugging / backward compat
-        _rawAnswer: data?.answer,
+        question: q,                 // IMPORTANT: use q (captured before setQuestion(""))
+        answerText: answerText,      // the displayed answer (your exact-line answer stays unchanged)
+        summaryText: summaryText,    // NEW: summary between answer and sources
+        sources: sources || [],      // filenames array
+        matches: matches || [],      // fallback closest matches array
+        _rawAnswer: data?.answer,    // keep if any old logic still reads it
       },
     ]);
 
@@ -123,7 +123,6 @@ function App() {
   async function deleteDocument(id) {
     if (!window.confirm("Delete this document?")) return;
 
-    // Capture filename before we remove it from state
     const doc = documents.find((x) => x.document_id === id);
     const filename = doc?.filename;
 
@@ -133,12 +132,10 @@ function App() {
 
     setChat((c) =>
       c.map((t) => {
-        // New chat shape: sources are filenames
         if (Array.isArray(t.sources) && filename) {
           return { ...t, sources: t.sources.filter((fn) => fn !== filename) };
         }
 
-        // Backward compat: if some turns still carry old array answers in _rawAnswer
         if (Array.isArray(t._rawAnswer)) {
           const newRaw = t._rawAnswer.map((p) => ({
             ...p,
@@ -192,7 +189,7 @@ function App() {
         <div style={styles.chatArea} ref={chatRef}>
           <div style={styles.chatInner}>
             {chat.length === 0 && (
-              <p style={{ color: "#475569", marginTop: 0 }}>
+              <p style={{ color: THEME.mutedText, marginTop: 0 }}>
                 Ask a question to start…
               </p>
             )}
@@ -208,6 +205,8 @@ function App() {
                   ? turn.sources
                   : extractSourcesFromOldAnswer(turn._rawAnswer);
 
+              const matches = Array.isArray(turn.matches) ? turn.matches : [];
+
               return (
                 <div key={i} style={styles.turn}>
                   <div style={styles.userMsg}>{turn.question}</div>
@@ -216,6 +215,10 @@ function App() {
                     <div style={styles.answerText}>
                       {answerText || "No answer returned."}
                     </div>
+
+                    {turn.summaryText ? (
+                      <div style={styles.summaryBlock}>{turn.summaryText}</div>
+                    ) : null}
 
                     {sources.length > 0 && (
                       <div style={styles.sourcesBlock}>
@@ -240,6 +243,25 @@ function App() {
                         </ul>
                       </div>
                     )}
+
+                    {sources.length === 0 && matches.length > 0 && (
+                      <div style={styles.sourcesBlock}>
+                        <div style={styles.sourcesTitle}>Closest matches</div>
+                        <div style={{ marginBottom: 6, opacity: 0.8 }}>
+                          No exact answer found in the documents. Closest matches are shown below.
+                        </div>
+                        <ul style={styles.sourcesList}>
+                          {matches.map((m, j) => (
+                            <li key={j} style={{ marginBottom: 10 }}>
+                              <div style={{ fontWeight: 700 }}>{m.filename}</div>
+                              <div style={{ whiteSpace: "pre-wrap", opacity: 0.9 }}>
+                                {m.snippet}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -251,7 +273,7 @@ function App() {
           <textarea
             style={styles.textarea}
             rows={2}
-            placeholder="Type your question here..."
+            placeholder="Ask questions based on the uploaded documents..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={onKeyDown}
@@ -266,56 +288,51 @@ function App() {
   );
 }
 
+/* ===== STYLES (COLORS ONLY) ===== */
 const styles = {
   page: {
     display: "flex",
     height: "100vh",
     width: "100vw",
-    fontFamily: "system-ui",
-    boxSizing: "border-box",
+    background: THEME.pageBg,
     overflow: "hidden",
   },
 
   left: {
     width: 320,
-    flexShrink: 0,
     padding: 16,
-    background: "#0f172a",
-    color: "white",
+    background: THEME.sidebarBg,
+    color: THEME.sidebarText,
     overflowY: "auto",
-    boxSizing: "border-box",
   },
 
   right: {
     flex: 1,
-    minWidth: 0,
     display: "flex",
     flexDirection: "column",
-    background: "#e0f2fe",
+    background: THEME.mainBg,
   },
 
   card: {
-    background: "#020617",
+    background: THEME.sidebarCardBg,
     padding: 12,
     borderRadius: 12,
     marginBottom: 16,
   },
+
   cardTitle: { margin: "0 0 10px 0" },
 
   docRow: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
-    gap: 10,
     marginTop: 10,
+    gap: 10,
   },
 
   chatArea: {
     flex: 1,
-    minHeight: 0,
     overflowY: "auto",
     padding: 18,
-    boxSizing: "border-box",
   },
 
   chatInner: {
@@ -334,22 +351,19 @@ const styles = {
 
   userMsg: {
     alignSelf: "flex-end",
-    background: "#007FFF",
-    color: "white",
+    background: THEME.userBubbleBg,
+    color: THEME.userBubbleText,
     padding: 10,
     borderRadius: 10,
     maxWidth: "70%",
-    wordBreak: "break-word",
   },
 
   botMsg: {
-    alignSelf: "flex-start",
-    background: "white",
-    color: "#020617",
+    background: THEME.botBubbleBg,
+    color: THEME.botBubbleText,
     padding: 12,
     borderRadius: 10,
     maxWidth: "85%",
-    wordBreak: "break-word",
   },
 
   answerText: {
@@ -357,10 +371,21 @@ const styles = {
     lineHeight: 1.45,
   },
 
+  summaryBlock: {
+    marginTop: 10,
+    padding: "10px 12px",
+    border: `1px solid ${THEME.divider}`,
+    borderRadius: 12,
+    background: THEME.cardBg,
+    color: THEME.mutedText,
+    fontSize: 13,
+    lineHeight: 1.4,
+  },
+
   sourcesBlock: {
     marginTop: 10,
     paddingTop: 10,
-    borderTop: "1px solid #e2e8f0",
+    borderTop: `1px solid ${THEME.divider}`,
   },
 
   sourcesTitle: {
@@ -381,9 +406,8 @@ const styles = {
   },
 
   sourceName: {
-    color: "#020617",
+    color: THEME.botBubbleText,
     flex: 1,
-    minWidth: 0,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
@@ -393,9 +417,9 @@ const styles = {
     padding: "4px 8px",
     fontSize: 12,
     borderRadius: 8,
-    border: "1px solid #ef4444",
-    background: "white",
-    color: "#ef4444",
+    border: `1px solid ${THEME.danger}`,
+    background: "#FFFFFF",
+    color: THEME.danger,
     cursor: "pointer",
   },
 
@@ -403,9 +427,8 @@ const styles = {
     display: "flex",
     gap: 10,
     padding: 12,
-    borderTop: "1px solid #94a3b8",
-    background: "#bae6fd",
-    boxSizing: "border-box",
+    borderTop: `1px solid ${THEME.divider}`,
+    background: THEME.cardBg,
   },
 
   textarea: {
@@ -414,20 +437,19 @@ const styles = {
     padding: 10,
     fontSize: 14,
     borderRadius: 10,
-    border: "1px solid #000",
-    background: "white",
-    color: "#000",
-    boxSizing: "border-box",
+    border: `1px solid ${THEME.inputBorder}`,
+    background: THEME.inputBg,
+    color: THEME.inputText,
   },
 
   askBtn: {
     width: 90,
     height: 44,
-    alignSelf: "flex-end",
     borderRadius: 10,
-    background: "white",
-    color: "#000",
-    border: "2px solid #000",
+    background: THEME.primaryBtnBg,
+    color: THEME.primaryBtnText,
+    border: "none",
+    fontWeight: 700,
   },
 };
 

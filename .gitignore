@@ -20,3 +20,26 @@ docker/ollama/id_ed25519.pub
 # OS
 .DS_Store
 Thumbs.db
+
+
+# Offline delivery artifacts (BIG)
+deliverables/
+EXTRACTED/
+*.tar
+*.tar.*
+*.7z
+*.7z.*
+*.zip
+*.zip.*
+*.log
+
+# --- Big offline deliverables (do not commit) ---
+deliverables/images/
+deliverables/package/*.7z*
+deliverables/test_extract/
+
+# Optional: also ignore any extracted runtime folders
+EXTRACTED/
+*.tar
+*.tar.*
+

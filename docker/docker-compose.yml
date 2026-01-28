@@ -1,16 +1,16 @@
-
 services:
   ollama:
-    image: ollama/ollama
+    build:
+      context: .
+      dockerfile: ollama.Dockerfile
+    image: rag_ollama_with_models:latest
     container_name: rag_ollama
     environment:
       - OLLAMA_NO_GPU=1
-    volumes:
-      - ./ollama:/root/.ollama
     ports:
       - "11434:11434"
     healthcheck:
-      test: ["CMD","ollama", "list"]
+      test: ["CMD","ollama","list"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -22,12 +22,16 @@ services:
     container_name: rag_backend
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      # - OLLAMA_LLM_MODEL=mistral:7b-instruct-q4_K_M
-      - OLLAMA_LLM_MODEL=gemma2:2b
+      - OLLAMA_LLM_MODEL=llama3.2:1b-instruct-q4_K_M
+      - OLLAMA_EMBED_MODEL=nomic-embed-text
       - OLLAMA_HTTP_RETRIES=3
       - OLLAMA_HTTP_BACKOFF=0.5
       - OLLAMA_HTTP_TIMEOUT=300
-
+      - RAG_INCLUDE_RAW_CHUNKS=0
+      - RAG_MAX_CHUNKS=4
+      - RAG_FALLBACK_SEARCH=1
+      - RAG_FALLBACK_MATCHES_N=3
+      - RAG_FALLBACK_LINES_PER_MATCH=3
     volumes:
       - ../data:/app/data
       - ../chroma_store:/app/chroma_store
@@ -37,7 +41,7 @@ services:
       ollama:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"] 
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 20s
       timeout: 10s
       retries: 5

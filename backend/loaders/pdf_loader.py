@@ -1,26 +1,27 @@
+from __future__ import annotations
+from typing import List, Tuple
 from pypdf import PdfReader
+
+
+def extract_pages_from_pdf(pdf_path: str) -> List[Tuple[int, str]]:
+    """
+    Returns (page_number_1based, text) for each page.
+    """
+    reader = PdfReader(pdf_path)
+    pages: List[Tuple[int, str]] = []
+
+    for i, page in enumerate(reader.pages):
+        t = page.extract_text() or ""
+        t = t.strip()
+        if t:
+            pages.append((i + 1, t))
+
+    return pages
 
 
 def extract_text_from_pdf(pdf_path: str) -> str:
     """
-    Extract full text from a PDF file.
+    Backward compatibility: full text join.
     """
-    reader = PdfReader(pdf_path)
-    text_parts = []
-
-    for page_number, page in enumerate(reader.pages):
-        page_text = page.extract_text()
-        if page_text:
-            text_parts.append(page_text)
-
-    return "\n".join(text_parts)
-
-
-if __name__ == "__main__":
-    # Simple local test
-    import sys
-    if len(sys.argv) != 2:
-        print("Usage: python pdf_loader.py <pdf_path>")
-        sys.exit(1)
-
-    print(extract_text_from_pdf(sys.argv[1])[:1000])
+    pages = extract_pages_from_pdf(pdf_path)
+    return "\n".join(t for _, t in pages)
