@@ -35,7 +35,7 @@ INCLUDE_RAW_CHUNKS = os.getenv("RAG_INCLUDE_RAW_CHUNKS", "0").lower() in ("1", "
 MIN_TOKEN_COVERAGE = float(os.getenv("RAG_MIN_TOKEN_COVERAGE", "0.12"))
 REQUIRE_QUOTED_PHRASE = os.getenv("RAG_REQUIRE_QUOTED_PHRASE", "1").lower() in ("1", "true", "yes")
 
-LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2:1b-instruct-q4_K_M")
+LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2:1b")
 
 UNKNOWN_ANSWER = "I don't know based on the provided documents."
 

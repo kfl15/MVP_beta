@@ -1,0 +1,41 @@
+.git
+.gitignore
+
+# Python/cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Runtime data
+chroma_store/
+data/uploads/
+data/tmp/
+
+# Frontend dependencies/build output
+frontend/node_modules/
+frontend/dist/
+
+# Local env/editor
+.env
+.env.*
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Large/offline artifacts
+deliverables/
+EXTRACTED/
+*.tar
+*.tar.*
+*.7z
+*.7z.*
+*.zip
+*.zip.*
+*.log

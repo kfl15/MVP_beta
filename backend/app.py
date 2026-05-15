@@ -31,7 +31,7 @@ ALLOWED_EXTS = {".pdf", ".txt", ".xlsx", ".xls", ".docx"}
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
 # OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "gemma2:2b")
-OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2:1b-instruct-q4_K_M")
+OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2:1b")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_REQUIRE_MODELS = os.getenv("OLLAMA_REQUIRE_MODELS", "1").lower() in ("1", "true", "yes")
 
