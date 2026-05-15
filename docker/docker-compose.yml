@@ -21,9 +21,9 @@ services:
       dockerfile: docker/backend.Dockerfile
     container_name: rag_backend
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_LLM_MODEL=llama3.2:1b
-      - OLLAMA_EMBED_MODEL=nomic-embed-text
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2:1b}
+      - OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       - OLLAMA_HTTP_RETRIES=3
       - OLLAMA_HTTP_BACKOFF=0.5
       - OLLAMA_HTTP_TIMEOUT=300
@@ -35,6 +35,8 @@ services:
     volumes:
       - ../data:/app/data
       - ../chroma_store:/app/chroma_store
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:

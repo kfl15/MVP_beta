@@ -82,6 +82,12 @@ Start the full app:
 
 The script first tries the normal Docker Compose build. If Docker bridge networking or DNS blocks package downloads during image build, it automatically retries the backend/frontend builds with Docker host networking.
 
+If Docker cannot pull Ollama models but your host machine already has Ollama with the required models, run:
+
+```bash
+USE_HOST_OLLAMA=1 ./start_app.sh
+```
+
 If you used a custom Ollama host port during setup, use the same value when starting the app:
 
 ```bash
