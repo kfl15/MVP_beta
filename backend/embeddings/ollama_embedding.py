@@ -11,8 +11,7 @@ class OllamaEmbeddingError(RuntimeError):
 
 
 def get_ollama_base_url() -> str:
-    # Docker compose will use http://ollama:11434 inside the backend container.
-    # Local dev on host will typically use http://localhost:11434.
+    # The app expects Ollama to run locally on the host machine.
     return os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 
 
@@ -84,7 +83,7 @@ def ensure_model(model: str):
 
     if not _is_installed(model, installed):
         raise OllamaEmbeddingError(
-            f"Ollama embedding model missing (expected pre-bundled): {model}"
+            f"Ollama embedding model missing. Run: ollama pull {model}"
         )
 
     _ensured.add(model)

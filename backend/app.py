@@ -25,13 +25,13 @@ from deletion.delete_document import delete_document
 DATA_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
 CHROMA_DIR = os.path.join(PROJECT_ROOT, "chroma_store")
 COLLECTION_NAME = "rag_documents"
-ALLOWED_EXTS = {".pdf", ".txt", ".xlsx", ".xls", ".docx"}
+ALLOWED_EXTS = {".pdf", ".png", ".jpg", ".jpeg", ".webp"}
 
 # Ollama config
 
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
 # OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "gemma2:2b")
-OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "llama3.2:1b")
+OLLAMA_LLM_MODEL = os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:0.5b")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
 OLLAMA_REQUIRE_MODELS = os.getenv("OLLAMA_REQUIRE_MODELS", "1").lower() in ("1", "true", "yes")
 
@@ -82,10 +82,10 @@ def verify_ollama_models_present():
         msg = (
             "[ERROR] Ollama is running but required models are missing:\n"
             + "\n".join([f" - {m}" for m in missing])
-            + "\n\nFix: inside docker folder run:\n"
-              "  docker compose exec ollama ollama pull <MODEL_NAME>\n"
+            + "\n\nFix: run:\n"
+              "  ollama pull <MODEL_NAME>\n"
             + "Example:\n"
-              f"  docker compose exec ollama ollama pull {missing[0]}\n"
+              f"  ollama pull {missing[0]}\n"
         )
         if OLLAMA_REQUIRE_MODELS:
             raise RuntimeError(msg)
@@ -136,8 +136,14 @@ def upload_files(files: List[UploadFile] = File(...)):
         with open(file_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        index_file(file_path, collection)
-        indexed.append(safe_name)
+        try:
+            result = index_file(file_path, collection)
+            if result.get("records_indexed", 0) > 0:
+                indexed.append(result)
+            else:
+                skipped.append({"filename": safe_name, "reason": result.get("reason", "no_ocr_text")})
+        except Exception as e:
+            skipped.append({"filename": safe_name, "reason": f"ocr_failed: {e}"})
 
     return {"indexed_files": indexed, "skipped_files": skipped}
 

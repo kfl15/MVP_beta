@@ -1,59 +1,39 @@
-# FinVault AI / Local RAG MVP
+# FinVault AI / OCR RAG MVP
 
-A fully local Retrieval-Augmented Generation (RAG) MVP for private accounting and business documents.
+A lightweight local RAG MVP for reading text from uploaded PDFs and images.
 
-The app runs with Docker, stores documents locally, uses ChromaDB for vectors, and uses Ollama for both embeddings and chat generation.
+The app runs the backend/frontend in Docker, keeps uploaded files and ChromaDB data locally, and uses a locally installed Ollama service for embeddings and chat. Ollama is not packaged inside Docker.
 
 ## What It Does
 
-- Upload `.pdf`, `.txt`, `.xlsx`, `.xls`, and `.docx` files.
-- Extract and chunk document text.
-- Create local embeddings with `nomic-embed-text`.
-- Store vectors in local ChromaDB.
-- Answer questions with `llama3.2:1b`.
-- Show source filenames when the answer is supported.
-- Return `I don't know based on the provided documents.` when the answer is not supported.
-- Delete uploaded documents and their vectors.
+- Accepts only `.pdf`, `.png`, `.jpg`, `.jpeg`, and `.webp` uploads.
+- Converts PDF pages to images, then applies OCR.
+- Uses PaddleOCR for stronger OCR on photos, scanned pages, cut paper, and imperfect images.
+- Stores one OCR record per image or PDF page in ChromaDB, without text chunking.
+- Shows the extracted OCR text first, then asks the local LLM to interpret it.
+- Tells the model not to invent missing text, numbers, dates, names, or amounts.
+- Deletes uploaded documents and their Chroma records.
 
 ## Why The Repo Is Lightweight
 
-Ollama models and Docker image exports are not stored in GitHub.
+The GitHub repo does not contain Ollama models, Docker image archives, uploads, or ChromaDB runtime data.
 
-Instead, first-time users run:
+First-time users install Ollama locally and run:
 
 ```bash
 ./setup_models.sh
 ```
 
-That script downloads the required Ollama models on the user's machine.
+That downloads the required Ollama models onto the user's own machine.
 
-## Tech Stack
+## Requirements
 
-- FastAPI backend
-- React + Vite frontend
-- ChromaDB vector store
-- Ollama local LLM and embeddings
-- Docker Compose
-- Nginx for serving the frontend container
-
-## Project Structure
-
-```text
-backend/                 FastAPI API and RAG logic
-frontend/                React + Vite UI
-docker/                  Docker Compose, Dockerfiles, nginx config
-setup_models.sh          First-time Ollama model setup
-data/uploads/            Runtime uploads, ignored by Git
-chroma_store/            Runtime vector DB, ignored by Git
-deliverables/            Optional offline artifacts, ignored by Git
-```
+- Ubuntu/Linux
+- Docker
+- Docker Compose plugin or legacy `docker-compose`
+- Local Ollama installed and running at `http://localhost:11434`
 
 ## First-Time Setup
-
-Requirements:
-
-- Docker
-- Docker Compose plugin, or legacy `docker-compose`
 
 Clone the repo:
 
@@ -62,46 +42,37 @@ git clone https://github.com/kfl15/MVP_beta.git
 cd MVP_beta
 ```
 
-Download the required Ollama models:
+Install Ollama locally:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Check Ollama:
+
+```bash
+curl http://localhost:11434/api/tags
+```
+
+If that fails, start Ollama:
+
+```bash
+ollama serve
+```
+
+In another terminal, download the required models:
 
 ```bash
 ./setup_models.sh
 ```
 
-If port `11434` is busy, the script will try `11435` or `11436`. You can also choose a port manually:
-
-```bash
-OLLAMA_HOST_PORT=11435 ./setup_models.sh
-```
-
-Start the full app:
+Start the app:
 
 ```bash
 ./start_app.sh
 ```
 
-The script first tries the normal Docker Compose build. If Docker bridge networking or DNS blocks package downloads during image build, it automatically retries the backend/frontend builds with Docker host networking.
-
-If Docker cannot pull Ollama models but your host machine already has Ollama with the required models, run:
-
-```bash
-USE_HOST_OLLAMA=1 ./start_app.sh
-```
-
-If you used a custom Ollama host port during setup, use the same value when starting the app:
-
-```bash
-OLLAMA_HOST_PORT=11435 ./start_app.sh
-```
-
-If your machine uses legacy Compose, run:
-
-```bash
-cd docker
-docker-compose up -d --build
-```
-
-Open the app:
+Open:
 
 ```text
 http://localhost:3000
@@ -113,48 +84,12 @@ Backend health:
 http://localhost:8000/health
 ```
 
-Backend API docs:
-
-```text
-http://localhost:8000/docs
-```
-
-## Demo Login
-
-```text
-admin1@gmail.com / admin1@12
-admin2@gmail.com / admin2@12
-```
-
-These are demo credentials only. Replace them before real use.
-
-## Docker Services
-
-```text
-ollama   -> official ollama/ollama image, port 11434
-backend  -> FastAPI app, port 8000
-frontend -> nginx-served React app, port 3000
-```
-
-Ollama models are stored in the Docker volume:
-
-```text
-ollama_models
-```
-
-Uploaded files and Chroma data are mounted from:
-
-```text
-data/
-chroma_store/
-```
-
 ## Models
 
-Default LLM:
+Default local LLM:
 
 ```text
-llama3.2:1b
+qwen2.5:0.5b
 ```
 
 Default embedding model:
@@ -163,13 +98,41 @@ Default embedding model:
 nomic-embed-text
 ```
 
-You can override them before running `setup_models.sh`:
+OCR engine:
 
-```bash
-OLLAMA_LLM_MODEL=your-llm OLLAMA_EMBED_MODEL=your-embed ./setup_models.sh
+```text
+PaddleOCR
 ```
 
-If you change models, update the backend environment values in `docker/docker-compose.yml` too.
+To use a different Ollama model:
+
+```bash
+OLLAMA_LLM_MODEL=your-model ./setup_models.sh
+OLLAMA_LLM_MODEL=your-model ./start_app.sh
+```
+
+## Docker Services
+
+```text
+backend  -> FastAPI app, host network, port 8000
+frontend -> nginx-served React app, port 3000
+```
+
+Ollama is local on the host machine, not a Docker service.
+
+## Project Structure
+
+```text
+backend/                 FastAPI API, OCR indexing, RAG query logic
+backend/loaders/         OCR loader for PDF pages and images
+frontend/                React + Vite UI
+docker/                  Docker Compose, Dockerfiles, nginx config
+setup_models.sh          Pulls local Ollama models
+start_app.sh             Checks Ollama, builds Docker, starts app
+data/uploads/            Runtime uploads, ignored by Git
+chroma_store/            Runtime ChromaDB data, ignored by Git
+deliverables/            Optional offline artifacts, ignored by Git
+```
 
 ## Backend API
 
@@ -181,6 +144,16 @@ GET    /documents
 DELETE /documents/{document_id}
 ```
 
+## OCR Settings
+
+These can be changed before starting the app:
+
+```bash
+OCR_LANG=en OCR_PDF_SCALE=2.5 OCR_MIN_WIDTH=1400 ./start_app.sh
+```
+
+Higher `OCR_PDF_SCALE` and `OCR_MIN_WIDTH` can improve OCR quality but use more CPU and memory.
+
 ## Local Backend Development
 
 Using the existing virtual environment:
@@ -189,13 +162,8 @@ Using the existing virtual environment:
 source /home/kflv/venvs/smart3_venv/bin/activate
 cd backend
 pip install -r requirements.txt
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
-```
-
-For local backend runs outside Docker, make sure Ollama is reachable:
-
-```bash
 export OLLAMA_BASE_URL=http://localhost:11434
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ## Local Frontend Development
@@ -230,7 +198,8 @@ docker/ollama/models/
 
 ## Notes
 
+- Run local Ollama before starting Docker.
+- Run `./setup_models.sh` before the first app start.
 - The backend verifies required Ollama models at startup.
 - The backend does not auto-pull models.
-- Run `./setup_models.sh` before starting the full app for the first time.
-- Use GitHub Releases, not normal Git commits, for any future large offline image archives.
+- The first OCR upload may take longer because PaddleOCR downloads its OCR model cache.

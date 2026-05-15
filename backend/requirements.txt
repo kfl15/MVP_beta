@@ -1,11 +1,10 @@
 fastapi
 uvicorn
 chromadb
-pypdf
 requests
 python-multipart
-pandas
-openpyxl
-xlrd
-python-docx
-
+Pillow
+pypdfium2
+numpy<2
+paddlepaddle==2.6.2
+paddleocr==2.8.1

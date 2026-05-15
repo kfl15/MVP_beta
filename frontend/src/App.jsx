@@ -101,12 +101,12 @@ function App() {
     setChat((prev) => [
       ...prev,
       {
-        question: q,                 // IMPORTANT: use q (captured before setQuestion(""))
-        answerText: answerText,      // the displayed answer (your exact-line answer stays unchanged)
-        summaryText: summaryText,    // NEW: summary between answer and sources
-        sources: sources || [],      // filenames array
-        matches: matches || [],      // fallback closest matches array
-        _rawAnswer: data?.answer,    // keep if any old logic still reads it
+        question: q,
+        answerText: answerText,
+        summaryText: summaryText,
+        sources: sources || [],
+        matches: matches || [],
+        _rawAnswer: data?.answer,
       },
     ]);
 
@@ -158,10 +158,11 @@ function App() {
         <h2 style={{ marginTop: 0 }}>Local RAG MVP</h2>
 
         <div style={styles.card}>
-          <h3 style={styles.cardTitle}>Upload Documents</h3>
+          <h3 style={styles.cardTitle}>Upload PDF or Images</h3>
           <input
             type="file"
             multiple
+            accept=".pdf,.png,.jpg,.jpeg,.webp"
             disabled={uploading}
             onChange={(e) => setFiles(e.target.files)}
           />
@@ -190,7 +191,7 @@ function App() {
           <div style={styles.chatInner}>
             {chat.length === 0 && (
               <p style={{ color: THEME.mutedText, marginTop: 0 }}>
-                Ask a question to start…
+                Upload a PDF or image, then ask what is written there.
               </p>
             )}
 
@@ -225,7 +226,12 @@ function App() {
                         <div style={styles.sourcesTitle}>Sources</div>
                         <ul style={styles.sourcesList}>
                           {sources.map((fn, j) => {
-                            const doc = documents.find((d) => d.filename === fn);
+                            const doc = documents.find(
+                              (d) =>
+                                fn === d.filename ||
+                                fn.startsWith(`${d.filename} `) ||
+                                fn.startsWith(`${d.filename} /`)
+                            );
                             return (
                               <li key={j} style={styles.sourceRow}>
                                 <span style={styles.sourceName}>{fn}</span>
@@ -273,7 +279,7 @@ function App() {
           <textarea
             style={styles.textarea}
             rows={2}
-            placeholder="Ask questions based on the uploaded documents..."
+            placeholder="Ask about the OCR text from uploaded PDFs/images..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={onKeyDown}

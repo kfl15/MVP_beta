@@ -27,7 +27,7 @@ def delete_document(document_id: str):
     client = PersistentClient(path=CHROMA_DIR)
     collection = client.get_or_create_collection(COLLECTION_NAME)
 
-    # Get all chunks for this document_id
+    # Get all OCR records for this document_id
     results = collection.get(
         where={"document_id": document_id},
         include=["metadatas"]
@@ -72,6 +72,7 @@ def delete_document(document_id: str):
     return {
         "status": "deleted",
         "document_id": document_id,
+        "records_deleted": len(ids),
         "chunks_deleted": len(ids),
         "files_deleted": deleted_files,
         "deleted_from_chroma": True

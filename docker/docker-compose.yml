@@ -1,47 +1,27 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: rag_ollama
-    environment:
-      - OLLAMA_NO_GPU=1
-    volumes:
-      - ollama_models:/root/.ollama
-    ports:
-      - "${OLLAMA_HOST_PORT:-11434}:11434"
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-
   backend:
     image: docker_backend:latest
     build:
       context: ..
       dockerfile: docker/backend.Dockerfile
     container_name: rag_backend
+    network_mode: host
     environment:
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-llama3.2:1b}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL:-qwen2.5:0.5b}
       - OLLAMA_EMBED_MODEL=${OLLAMA_EMBED_MODEL:-nomic-embed-text}
       - OLLAMA_HTTP_RETRIES=3
       - OLLAMA_HTTP_BACKOFF=0.5
       - OLLAMA_HTTP_TIMEOUT=300
       - RAG_INCLUDE_RAW_CHUNKS=0
-      - RAG_MAX_CHUNKS=4
-      - RAG_FALLBACK_SEARCH=1
-      - RAG_FALLBACK_MATCHES_N=3
-      - RAG_FALLBACK_LINES_PER_MATCH=3
+      - RAG_QUERY_TOP_K=5
+      - RAG_MAX_CONTEXT_CHARS=12000
+      - OCR_LANG=${OCR_LANG:-en}
+      - OCR_PDF_SCALE=${OCR_PDF_SCALE:-2.5}
+      - OCR_MIN_WIDTH=${OCR_MIN_WIDTH:-1400}
     volumes:
       - ../data:/app/data
       - ../chroma_store:/app/chroma_store
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    ports:
-      - "8000:8000"
-    depends_on:
-      ollama:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5).read()"]
       interval: 20s
@@ -58,6 +38,3 @@ services:
       - "3000:80"
     depends_on:
       - backend
-
-volumes:
-  ollama_models:
