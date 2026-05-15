@@ -15,6 +15,7 @@ services:
       retries: 5
 
   backend:
+    image: docker_backend:latest
     build:
       context: ..
       dockerfile: docker/backend.Dockerfile
@@ -46,6 +47,7 @@ services:
       retries: 5
 
   frontend:
+    image: docker_frontend:latest
     build:
       context: ..
       dockerfile: docker/frontend.Dockerfile

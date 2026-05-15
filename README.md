@@ -77,15 +77,15 @@ OLLAMA_HOST_PORT=11435 ./setup_models.sh
 Start the full app:
 
 ```bash
-cd docker
-docker compose up -d --build
+./start_app.sh
 ```
 
-If you used a custom Ollama host port during setup, use the same value when starting Docker Compose:
+The script first tries the normal Docker Compose build. If Docker bridge networking or DNS blocks package downloads during image build, it automatically retries the backend/frontend builds with Docker host networking.
+
+If you used a custom Ollama host port during setup, use the same value when starting the app:
 
 ```bash
-cd docker
-OLLAMA_HOST_PORT=11435 docker compose up -d --build
+OLLAMA_HOST_PORT=11435 ./start_app.sh
 ```
 
 If your machine uses legacy Compose, run:
