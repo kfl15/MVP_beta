@@ -21,7 +21,7 @@ The GitHub repo does not contain Ollama models, Docker image archives, uploads, 
 First-time users install Ollama locally and run:
 
 ```bash
-./setup_models.sh
+bash setup_models.sh
 ```
 
 That downloads the required Ollama models onto the user's own machine.
@@ -63,13 +63,13 @@ ollama serve
 In another terminal, download the required models:
 
 ```bash
-./setup_models.sh
+bash setup_models.sh
 ```
 
 Start the app:
 
 ```bash
-./start_app.sh
+bash start_app.sh
 ```
 
 Open:
@@ -107,8 +107,8 @@ PaddleOCR
 To use a different Ollama model:
 
 ```bash
-OLLAMA_LLM_MODEL=your-model ./setup_models.sh
-OLLAMA_LLM_MODEL=your-model ./start_app.sh
+OLLAMA_LLM_MODEL=your-model bash setup_models.sh
+OLLAMA_LLM_MODEL=your-model bash start_app.sh
 ```
 
 ## Docker Services
@@ -149,7 +149,7 @@ DELETE /documents/{document_id}
 These can be changed before starting the app:
 
 ```bash
-OCR_LANG=en OCR_PDF_SCALE=2.5 OCR_MIN_WIDTH=1400 ./start_app.sh
+OCR_LANG=en OCR_PDF_SCALE=2.5 OCR_MIN_WIDTH=1400 bash start_app.sh
 ```
 
 Higher `OCR_PDF_SCALE` and `OCR_MIN_WIDTH` can improve OCR quality but use more CPU and memory.
@@ -199,7 +199,8 @@ docker/ollama/models/
 ## Notes
 
 - Run local Ollama before starting Docker.
-- Run `./setup_models.sh` before the first app start.
+- Run `bash setup_models.sh` before the first app start.
+- If you prefer `./setup_models.sh`, first run `chmod +x setup_models.sh start_app.sh`.
 - The backend verifies required Ollama models at startup.
 - The backend does not auto-pull models.
 - The first OCR upload may take longer because PaddleOCR downloads its OCR model cache.
