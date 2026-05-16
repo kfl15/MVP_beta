@@ -155,6 +155,8 @@ Rules:
 - Do not invent missing words, numbers, dates, names, or amounts.
 - Use only the OCR text as evidence.
 - If OCR text is broken, uncertain, or incomplete, still explain the visible parts and clearly mark what is unclear.
+- Do not assign meanings to numbers unless the OCR text clearly labels them.
+- Prefer cautious prose over field extraction when the OCR text is noisy.
 - Do not say "{UNKNOWN_ANSWER}" when OCR text exists and at least some meaning can be understood.
 - Say "{UNKNOWN_ANSWER}" only when the OCR text is empty or has no understandable relevant content.
 - Keep the answer concise and practical.

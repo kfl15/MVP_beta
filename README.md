@@ -146,6 +146,16 @@ GET    /documents
 DELETE /documents/{document_id}
 ```
 
+## Sample Proof
+
+A small OCR proof sample is included in:
+
+```text
+samples/test_case_1/
+```
+
+It contains the source image, saved OCR text, sample output, and an output preview image.
+
 ## OCR Settings
 
 These can be changed before starting the app:
