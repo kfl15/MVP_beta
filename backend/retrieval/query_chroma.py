@@ -148,13 +148,15 @@ def _interpret_ocr(question: str, context: str) -> str:
 
     prompt = f"""
 You are reading OCR text extracted from uploaded images or PDF pages.
-Write a short gist of what the OCR text means, using ONLY the OCR text below.
-Also address the user's question if the OCR text supports it.
+Write a useful short gist of what can be understood from the OCR text below.
+Also answer the user's question when the OCR text gives enough evidence.
 
 Rules:
 - Do not invent missing words, numbers, dates, names, or amounts.
-- If OCR text is broken, uncertain, or incomplete, clearly say what is unclear.
-- If the user's question is not supported by the OCR text, say exactly: {UNKNOWN_ANSWER}
+- Use only the OCR text as evidence.
+- If OCR text is broken, uncertain, or incomplete, still explain the visible parts and clearly mark what is unclear.
+- Do not say "{UNKNOWN_ANSWER}" when OCR text exists and at least some meaning can be understood.
+- Say "{UNKNOWN_ANSWER}" only when the OCR text is empty or has no understandable relevant content.
 - Keep the answer concise and practical.
 
 OCR text:
