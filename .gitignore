@@ -15,6 +15,7 @@ chroma_store/
 
 # Uploaded/runtime files
 data/uploads/
+data/extracted_texts/
 data/tmp/
 
 # Node / frontend build

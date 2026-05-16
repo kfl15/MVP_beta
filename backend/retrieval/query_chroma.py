@@ -89,6 +89,8 @@ def _ocr_items(selected: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "filename": meta.get("filename"),
             "image_name": meta.get("image_name"),
             "page_number": meta.get("page_number"),
+            "text_file_name": meta.get("text_file_name"),
+            "text_file_path": meta.get("text_file_path"),
             "text": item.get("doc") or "",
             "distance": item.get("dist"),
             "document_id": meta.get("document_id"),
@@ -97,12 +99,25 @@ def _ocr_items(selected: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return items
 
 
+def _read_saved_text(item: Dict[str, Any]) -> str:
+    meta = item.get("meta") or {}
+    text_file_path = meta.get("text_file_path")
+    if text_file_path:
+        path = os.path.join(PROJECT_ROOT, text_file_path)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            pass
+    return item.get("doc") or ""
+
+
 def _build_ocr_context(selected: List[Dict[str, Any]]) -> str:
     parts = []
     total = 0
     for i, item in enumerate(selected, start=1):
         meta = item.get("meta") or {}
-        text = (item.get("doc") or "").strip()
+        text = _read_saved_text(item).strip()
         if not text:
             continue
         header = f"[OCR TEXT {i} | {_source_label(meta)}]"
@@ -133,12 +148,13 @@ def _interpret_ocr(question: str, context: str) -> str:
 
     prompt = f"""
 You are reading OCR text extracted from uploaded images or PDF pages.
-Answer the user's question using ONLY the OCR text below.
+Write a short gist of what the OCR text means, using ONLY the OCR text below.
+Also address the user's question if the OCR text supports it.
 
 Rules:
 - Do not invent missing words, numbers, dates, names, or amounts.
 - If OCR text is broken, uncertain, or incomplete, clearly say what is unclear.
-- If the answer is not supported by the OCR text, say exactly: {UNKNOWN_ANSWER}
+- If the user's question is not supported by the OCR text, say exactly: {UNKNOWN_ANSWER}
 - Keep the answer concise and practical.
 
 OCR text:
@@ -172,7 +188,7 @@ def query_rag(question: str) -> Dict[str, Any]:
 
     if not selected:
         payload = {
-            "answer": f"Extracted OCR text:\n\nNo OCR text found.\n\nAI interpretation:\n\n{UNKNOWN_ANSWER}",
+            "answer": f"No OCR text found.\n\nLLM thinks:\n{UNKNOWN_ANSWER}",
             "ocr_text": "",
             "interpretation": UNKNOWN_ANSWER,
             "sources": [],
@@ -183,12 +199,15 @@ def query_rag(question: str) -> Dict[str, Any]:
         return payload
 
     context = _build_ocr_context(selected)
-    interpretation = _interpret_ocr(question, context)
-    answer = f"Extracted OCR text:\n\n{context or 'No OCR text found.'}\n\nAI interpretation:\n\n{interpretation}"
+    exact_text = _read_saved_text(selected[0])
+    display_text = exact_text if exact_text else "No OCR text found."
+    interpretation = _interpret_ocr(question, exact_text)
+    answer = f"{display_text}\n\nLLM thinks:\n{interpretation}"
 
     payload = {
         "answer": answer,
-        "ocr_text": context,
+        "ocr_text": display_text,
+        "ocr_context": context,
         "interpretation": interpretation,
         "sources": _unique_sources(selected),
         "ocr_items": _ocr_items(selected),

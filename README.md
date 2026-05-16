@@ -9,8 +9,9 @@ The app runs the backend/frontend in Docker, keeps uploaded files and ChromaDB d
 - Accepts only `.pdf`, `.png`, `.jpg`, `.jpeg`, and `.webp` uploads.
 - Converts PDF pages to images, then applies OCR.
 - Uses PaddleOCR for stronger OCR on photos, scanned pages, cut paper, and imperfect images.
+- Saves each extracted OCR result as a timestamped `.txt` file under `data/extracted_texts/`.
 - Stores one OCR record per image or PDF page in ChromaDB, without text chunking.
-- Shows the extracted OCR text first, then asks the local LLM to interpret it.
+- Shows the exact saved OCR text first, then `LLM thinks:` with the local LLM's gist.
 - Tells the model not to invent missing text, numbers, dates, names, or amounts.
 - Deletes uploaded documents and their Chroma records.
 
@@ -130,6 +131,7 @@ docker/                  Docker Compose, Dockerfiles, nginx config
 setup_models.sh          Pulls local Ollama models
 start_app.sh             Checks Ollama, builds Docker, starts app
 data/uploads/            Runtime uploads, ignored by Git
+data/extracted_texts/    Runtime OCR text files, ignored by Git
 chroma_store/            Runtime ChromaDB data, ignored by Git
 deliverables/            Optional offline artifacts, ignored by Git
 ```
@@ -191,6 +193,7 @@ deliverables/
 *.7z
 chroma_store/
 data/uploads/
+data/extracted_texts/
 frontend/node_modules/
 frontend/dist/
 docker/ollama/models/

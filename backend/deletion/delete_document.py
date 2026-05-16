@@ -19,6 +19,7 @@ def delete_document(document_id: str):
     Deletes ALL data associated with a document_id:
     - embeddings from Chroma (filtered by document_id)
     - original uploaded file(s) (via filename metadata)
+    - saved OCR text file(s) (via text_file_path metadata)
     """
 
     if not document_id or not document_id.strip():
@@ -44,9 +45,12 @@ def delete_document(document_id: str):
 
     # Collect filenames safely
     filenames = set()
+    text_file_paths = set()
     for m in metas:
         if m and m.get("filename"):
             filenames.add(m.get("filename"))
+        if m and m.get("text_file_path"):
+            text_file_paths.add(m.get("text_file_path"))
 
     # Delete original files from uploads directory
     deleted_files = []
@@ -65,6 +69,21 @@ def delete_document(document_id: str):
                     detail=f"Failed to delete file '{safe_name}': {e}"
                 )
 
+    deleted_text_files = []
+    for rel_path in text_file_paths:
+        safe_rel = os.path.normpath(rel_path or "")
+        if safe_rel.startswith("..") or os.path.isabs(safe_rel):
+            continue
+        text_path = os.path.join(PROJECT_ROOT, safe_rel)
+        if os.path.exists(text_path):
+            try:
+                os.remove(text_path)
+                deleted_text_files.append(safe_rel)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to delete OCR text file '{safe_rel}': {e}"
+                )
 
     # Delete all vectors for this document
     collection.delete(where={"document_id": document_id})
@@ -75,5 +94,6 @@ def delete_document(document_id: str):
         "records_deleted": len(ids),
         "chunks_deleted": len(ids),
         "files_deleted": deleted_files,
+        "text_files_deleted": deleted_text_files,
         "deleted_from_chroma": True
     }

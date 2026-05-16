@@ -3,6 +3,8 @@ import sys
 import uuid
 import shutil
 import argparse
+import re
+from datetime import datetime
 from typing import Any, Dict
 
 from chromadb import PersistentClient
@@ -16,6 +18,7 @@ from loaders.ocr_loader import SUPPORTED_OCR_EXTS, extract_ocr_records
 
 
 DATA_DIR = os.path.join(PROJECT_ROOT, "data", "uploads")
+EXTRACTED_TEXT_DIR = os.path.join(PROJECT_ROOT, "data", "extracted_texts")
 CHROMA_DIR = os.path.join(PROJECT_ROOT, "chroma_store")
 COLLECTION_NAME = "rag_documents"
 
@@ -47,6 +50,27 @@ def _sanitize_meta(meta: Dict[str, Any]) -> Dict[str, Any]:
     return clean
 
 
+def _safe_stem(name: str) -> str:
+    stem = os.path.splitext(os.path.basename(name or "ocr_text"))[0]
+    stem = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._-")
+    return stem or "ocr_text"
+
+
+def _save_extracted_text(image_name: str, text: str) -> Dict[str, str]:
+    os.makedirs(EXTRACTED_TEXT_DIR, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    text_filename = f"{_safe_stem(image_name)}_{timestamp}.txt"
+    text_path = os.path.join(EXTRACTED_TEXT_DIR, text_filename)
+
+    with open(text_path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+    return {
+        "text_file_name": text_filename,
+        "text_file_path": os.path.relpath(text_path, PROJECT_ROOT),
+    }
+
+
 def index_file(file_path: str, collection) -> Dict[str, Any]:
     document_id = str(uuid.uuid4())
     filename = os.path.basename(file_path)
@@ -64,21 +88,26 @@ def index_file(file_path: str, collection) -> Dict[str, Any]:
     records = extract_ocr_records(file_path)
 
     indexed = 0
+    text_files = []
     for idx, record in enumerate(records):
         text = (record.get("text") or "").strip()
         stored_text = text or "[No OCR text detected.]"
+        image_name = record.get("image_name") or filename
+        saved_text = _save_extracted_text(image_name, stored_text)
         embedding = get_embedding(stored_text)
 
         meta = _sanitize_meta({
             "document_id": document_id,
             "filename": filename,
-            "image_name": record.get("image_name") or filename,
+            "image_name": image_name,
             "page_number": record.get("page_number"),
             "file_ext": ext,
             "source_type": record.get("source_type"),
             "ocr_engine": record.get("engine"),
             "ocr_avg_confidence": record.get("avg_confidence"),
             "ocr_record_id": idx,
+            "text_file_name": saved_text["text_file_name"],
+            "text_file_path": saved_text["text_file_path"],
         })
 
         collection.add(
@@ -88,12 +117,14 @@ def index_file(file_path: str, collection) -> Dict[str, Any]:
             metadatas=[meta],
         )
         indexed += 1
+        text_files.append(saved_text["text_file_path"])
 
     print(f"Indexed {indexed} OCR records | document_id={document_id}")
     return {
         "document_id": document_id,
         "filename": filename,
         "records_indexed": indexed,
+        "text_files": text_files,
     }
 
 
@@ -102,6 +133,7 @@ def main(reset: bool = False):
         reset_chroma()
 
     os.makedirs(DATA_DIR, exist_ok=True)
+    os.makedirs(EXTRACTED_TEXT_DIR, exist_ok=True)
     os.makedirs(CHROMA_DIR, exist_ok=True)
 
     client = PersistentClient(path=CHROMA_DIR)

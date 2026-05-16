@@ -155,10 +155,10 @@ function App() {
     <div style={styles.page}>
       {/* LEFT */}
       <div style={styles.left}>
-        <h2 style={{ marginTop: 0 }}>Local RAG MVP</h2>
+        <h2 style={{ marginTop: 0 }}>OCR Text Reader</h2>
 
         <div style={styles.card}>
-          <h3 style={styles.cardTitle}>Upload PDF or Images</h3>
+          <h3 style={styles.cardTitle}>Upload PDF or Image</h3>
           <input
             type="file"
             multiple
@@ -279,7 +279,7 @@ function App() {
           <textarea
             style={styles.textarea}
             rows={2}
-            placeholder="Ask about the OCR text from uploaded PDFs/images..."
+            placeholder="Ask what the saved OCR text means..."
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={onKeyDown}
